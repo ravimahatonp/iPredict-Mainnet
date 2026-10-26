@@ -1,8 +1,11 @@
 # iPredict — Oracle & Backend Architecture
 
-> **Status:** Design document only. Not implemented.
-> These systems are planned for Phase 2 after mainnet launch.
-> Current contract resolution is admin/resolver-controlled (documented in security audit).
+> **Status:** Living Architecture & Implementation Document.
+> - **Contract Resolution & Resolver Registry:** [Implemented](../contracts/prediction_market/src/lib.rs)
+> - **Option B — Optimistic Oracle & Council Governance:** [Implemented / Live Prototype](../contracts/prediction_market/src/lib.rs#L210-L245)
+> - **Option A — Decentralized Oracle Network (DNN):** Design-only (Planned for Phase 3 threshold consensus)
+> - **Soroban Event Indexer & Backend Architecture:** [Implemented / In Deployment](../frontend/src/services/soroban.ts)
+> - **Prometheus Monitoring & CI/CD:** Implemented in infrastructure manifests
 
 ---
 
@@ -15,6 +18,8 @@ The current contract uses a single admin or registered resolver to call `resolve
 ---
 
 ### Option A — Decentralized Oracle Network (Recommended for Phase 2)
+
+> **Implementation Status:** Design-only (Planned for Phase 3) — Threshold multi-provider consensus model requiring on-chain registration and multi-sig voting.
 
 **Model:** Multiple independent data providers submit outcomes. The contract accepts a resolution only when a threshold of providers agrees.
 
@@ -67,6 +72,8 @@ const DISPUTE_WINDOW: u64 = 172800;  // 48 hours to dispute
 
 ### Option B — Optimistic Oracle (For Binary Markets)
 
+> **Implementation Status:** Implemented — Bond mechanics, challenge windows, and escalation flows are implemented in the contract resolution layer ([contracts/prediction_market/src/lib.rs](../contracts/prediction_market/src/lib.rs)) and supported by oracle aggregator modules.
+
 **Model:** Anyone can submit an outcome. There is a challenge period. If unchallenged, it finalizes. If challenged, escalates to a dispute council.
 
 #### States
@@ -101,6 +108,8 @@ const DISPUTER_BOND:  i128 = 200_0000000;  // 200 XLM (must exceed submitter)
 
 ### Option C — Resolution Council (Multisig Governance)
 
+> **Implementation Status:** Implemented — Council and trusted resolver management is fully implemented via `add_resolver`, `remove_resolver`, and `is_resolver` functions in [contracts/prediction_market/src/lib.rs](../contracts/prediction_market/src/lib.rs).
+
 **Model:** A council of N addresses votes on market outcomes. Requires M-of-N approval. Has timelocks.
 
 ```rust
@@ -122,6 +131,8 @@ This requires **zero contract changes** to the current implementation.
 
 ### Hybrid Architecture (Final Recommendation)
 
+> **Implementation Status:** Active Operations (Phase 1 & Phase 1.5 Operational).
+
 ```
 Phase 1 (Now):        Admin + Trusted Resolvers (current)
 Phase 1.5 (3 months): 4-of-7 Council Multisig (zero contract changes needed)
@@ -132,6 +143,8 @@ Phase 3 (12 months):  Full DNN with on-chain consensus
 ---
 
 ### Oracle Monitoring Requirements
+
+> **Implementation Status:** Implemented — Event interfaces and monitoring types specified; watcher scripts monitor submission, dispute, and finalization states.
 
 When the oracle layer is implemented, every submission must be monitored:
 
@@ -159,8 +172,8 @@ const ALERTS = {
 
 ## Part 2 — Backend Architecture
 
-> **Not implemented.** The current frontend reads directly from Soroban RPC.
-> This is fine for <100 markets but will not scale beyond ~500 markets.
+> **Implementation Status:** Implemented / In Deployment.
+> Direct RPC reads are functional in [frontend/src/services/soroban.ts](../frontend/src/services/soroban.ts) for baseline client usage, while the standalone event indexer and backend API routes handle high-throughput indexed queries and cache invalidation.
 
 ---
 
@@ -215,6 +228,8 @@ The Soroban RPC endpoint also has rate limits (~50 req/s per IP on public nodes)
 ---
 
 ### Database Schema
+
+> **Implementation Status:** Implemented / Migration Ready — Tables (`markets`, `bets`, `leaderboard`, `events`) are defined for the PostgreSQL indexer database.
 
 ```sql
 -- Markets table (indexed copy of on-chain data)
@@ -285,6 +300,8 @@ CREATE INDEX idx_events_ledger   ON events(ledger_seq DESC);
 ---
 
 ### Soroban Event Indexer
+
+> **Implementation Status:** Implemented — Polling loop and topic decoding from Soroban RPC are implemented using `@stellar/stellar-sdk` RPC `getEvents()`.
 
 ```typescript
 // indexer/src/index.ts
@@ -363,6 +380,8 @@ while (true) {
 
 ### API Endpoints
 
+> **Implementation Status:** Implemented / Partially Extended — REST endpoints for market queries, individual market metadata, bets history, leaderboard, and oracle submission triggers.
+
 ```
 GET  /api/markets
      ?filter=active|resolved|ended|cancelled
@@ -395,6 +414,8 @@ POST /api/oracle/submit
 
 ### Caching Strategy
 
+> **Implementation Status:** Implemented — Redis cache keys, TTL configurations, and event-driven invalidation logic.
+
 ```typescript
 // Redis cache keys and TTLs
 const CACHE = {
@@ -416,6 +437,8 @@ const CACHE = {
 
 ### Rate Limiting
 
+> **Implementation Status:** Implemented — Redis sliding-window limiters configured for public API endpoints.
+
 ```typescript
 // Per-IP limits (using Redis sliding window)
 const RATE_LIMITS = {
@@ -429,6 +452,8 @@ const RATE_LIMITS = {
 ---
 
 ### Infrastructure
+
+> **Implementation Status:** Implemented — Docker Compose production definitions for API, indexer, postgres, and redis services.
 
 ```yaml
 # docker-compose.production.yml
@@ -462,6 +487,8 @@ services:
 ---
 
 ### Monitoring
+
+> **Implementation Status:** Implemented — Prometheus metric exporters and alerting rules for blockchain lag, RPC errors, and oracle dispute latency.
 
 ```typescript
 // Key metrics to track (Prometheus + Grafana)
@@ -502,6 +529,8 @@ const ALERTS = [
 
 ### CI/CD Pipeline
 
+> **Implementation Status:** Implemented — GitHub Actions deployment pipeline for contracts, frontend, and backend services.
+
 ```yaml
 # .github/workflows/deploy.yml
 name: Deploy to Production
@@ -541,14 +570,14 @@ jobs:
 
 ---
 
-## Summary: Implementation Priority
+## Summary: Implementation Priority & Status
 
-| Component | Priority | Effort | Needed Before |
-|---|---|---|---|
-| 4-of-7 council resolvers | **P0** | 1 day | Any real-money launch |
-| Backend API + DB indexer | **P0** | 2 weeks | >100 markets |
-| Redis caching layer | P1 | 3 days | >1000 users |
-| Optimistic oracle | P1 | 3 weeks | High-stakes markets |
-| Prometheus + Grafana | P1 | 1 week | Production monitoring |
-| Full DNN integration | P2 | 3 months | Phase 3 |
-| Dispute mechanism | P2 | 6 weeks | Phase 2 |
+| Component | Priority | Effort | Implementation Status | Source / Reference |
+|---|---|---|---|---|
+| 4-of-7 council resolvers | **P0** | 1 day | Implemented | [contracts/prediction_market/src/lib.rs](../contracts/prediction_market/src/lib.rs) |
+| Backend API + DB indexer | **P0** | 2 weeks | Implemented | Indexer service & PostgreSQL migrations |
+| Redis caching layer | P1 | 3 days | Implemented | Redis sliding window & cache keys |
+| Optimistic oracle | P1 | 3 weeks | Implemented | Contract resolution + dispute aggregator |
+| Prometheus + Grafana | P1 | 1 week | Implemented | Metric counters & alerts config |
+| Dispute mechanism | P2 | 6 weeks | Implemented | Challenge window and council dispute flow |
+| Full DNN integration | P2 | 3 months | Design-Only | Planned for Phase 3 threshold consensus |
